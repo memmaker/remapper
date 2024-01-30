@@ -263,7 +263,6 @@ func (e *Engine) handleMouseClick() bool {
 		if e.mousePosInPixels.X <= int(e.listWidth) {
 			if e.mousePosInPixels.Y >= bound[0] && e.mousePosInPixels.Y <= bound[1] {
 				key := e.orderedKeys[index]
-				println("selected", key)
 				e.selectedListIndex = index
 				e.selectedAtlasIndex = e.iconMapping[key]
 				return true
