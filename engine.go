@@ -268,7 +268,7 @@ func (e *Engine) handleMouseClick() bool {
 				e.selectedAtlasIndex = e.iconMapping[key]
 				return true
 			}
-		} else if e.selectedListIndex > 0 && e.selectedListIndex < len(e.orderedKeys) {
+		} else if e.selectedListIndex >= 0 && e.selectedListIndex < len(e.orderedKeys) {
 			// atlas clicked..
 			atlasPos := e.atlasGridFromScreenPos(e.mousePosInPixels)
 			atlasIndex := XYToIndex(atlasPos.X, atlasPos.Y, e.tileAtlas.GetCellCount().X)

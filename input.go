@@ -1,39 +1,43 @@
 package main
 
 import (
-	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/inpututil"
+    "github.com/hajimehoshi/ebiten/v2"
+    "github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
 func (e *Engine) handleInput() bool {
 
-	if inpututil.IsKeyJustPressed(ebiten.KeyS) {
-		e.saveChanges(e.mappingFileName)
-		e.saveTicks = 30
-		return true
-	}
+    if inpututil.IsKeyJustPressed(ebiten.KeyF10) {
+        e.shouldQuit = true
+    }
 
-	mousePosInPixelsX, mousePosInPixelsY := ebiten.CursorPosition()
-	mousePosInPixelsX = int(float64(mousePosInPixelsX) / e.deviceDPIScale)
-	mousePosInPixelsY = int(float64(mousePosInPixelsY) / e.deviceDPIScale)
+    if inpututil.IsKeyJustPressed(ebiten.KeyS) {
+        e.saveChanges(e.mappingFileName)
+        e.saveTicks = 30
+        return true
+    }
 
-	if e.mousePosInPixels.X != mousePosInPixelsX || e.mousePosInPixels.Y != mousePosInPixelsY {
-		e.mousePosInPixels.X = mousePosInPixelsX
-		e.mousePosInPixels.Y = mousePosInPixelsY
-		e.OnMouseMoved(e.mousePosInPixels)
-	}
+    mousePosInPixelsX, mousePosInPixelsY := ebiten.CursorPosition()
+    mousePosInPixelsX = int(float64(mousePosInPixelsX) / e.deviceDPIScale)
+    mousePosInPixelsY = int(float64(mousePosInPixelsY) / e.deviceDPIScale)
 
-	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-		return e.handleMouseClick()
-	}
+    if e.mousePosInPixels.X != mousePosInPixelsX || e.mousePosInPixels.Y != mousePosInPixelsY {
+        e.mousePosInPixels.X = mousePosInPixelsX
+        e.mousePosInPixels.Y = mousePosInPixelsY
+        e.OnMouseMoved(e.mousePosInPixels)
+    }
 
-	_, dy := ebiten.Wheel()
-	if dy != 0 {
-		sensitity := 4.0
-		e.scrollOffset += dy * sensitity
-		e.updateElementBounds()
-		return true
-	}
+    if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+        return e.handleMouseClick()
+    }
 
-	return false
+    _, dy := ebiten.Wheel()
+    if dy != 0 {
+        sensitity := 4.0
+        e.scrollOffset += dy * sensitity
+        e.updateElementBounds()
+        return true
+    }
+
+    return false
 }
