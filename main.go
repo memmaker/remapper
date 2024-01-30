@@ -10,6 +10,10 @@ import (
 	"os"
 	"strconv"
 )
+import "embed"
+
+//go:embed FiraSans-Regular.ttf
+var embedFS embed.FS
 
 func buildCurrentMapping(mappingRecFile string) ([]recfile.Record, map[string]int32) {
 	mapping := make(map[string]int32)
@@ -48,7 +52,7 @@ func main() {
 	atlas := renderer.NewTextureAtlas(atlasName, cellWidth, cellHeight)
 
 	engine := NewEngine(1200, 800, "ReMapper")
-	engine.SetTTFFont(mustOpen("FiraSans-Regular.ttf"), 16)
+	engine.SetTTFFont(mustOpenEmbedded("FiraSans-Regular.ttf"), 16)
 	engine.SetAtlas(atlas)
 	engine.SetMapping(mappingFileName, mapping, originalRecords)
 
@@ -70,10 +74,10 @@ func runAppWithEbiten(engine *Engine) {
 	}
 }
 
-func mustOpen(filename string) io.ReaderAt {
-	f, err := os.Open(filename)
+func mustOpenEmbedded(filename string) io.ReaderAt {
+	f, err := embedFS.Open(filename)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return f
+	return f.(io.ReaderAt)
 }
