@@ -5,14 +5,19 @@ import (
 	"ReMapper/recfile"
 	"ReMapper/renderer"
 	"cmp"
-	"github.com/hajimehoshi/ebiten/v2"
-	"golang.org/x/image/font"
-	"golang.org/x/image/font/opentype"
+	"image"
 	"image/color"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
+	"log"
 	"os"
 	"slices"
 	"strconv"
+
+	"github.com/hajimehoshi/ebiten/v2"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/opentype"
 )
 
 type Engine struct {
@@ -25,23 +30,38 @@ type Engine struct {
 	mousePosInPixels            geometry.Point
 
 	// use-case specific
-	iconMapping        map[string]int32
-	orderedKeys        []string
-	tileAtlas          renderer.TextureAtlas
-	scrollOffset       float64
-	listWidth          float64
-	padding            float64
-	drawInfos          []ElementInfo
-	bounds             [][2]int
-	selectedListIndex  int
-	atlasScale         float64
-	atlasBounds        geometry.Rect
-	atlasSelectorPos   geometry.Point
-	drawAtlasCursor    bool
-	selectedAtlasIndex int32
-	originalRecords    []recfile.Record
-	mappingFileName    string
-	saveTicks          int
+	iconMapping         map[string]int32
+	labels              map[string]string        // internal_name -> text shown in the list
+	referenceImages     map[string]string        // internal_name -> reference_image path, from the rec file
+	referenceImageCache map[string]*ebiten.Image // path -> loaded image, or nil for one that failed to load
+	orderedKeys         []string
+	tileAtlas           renderer.TextureAtlas
+	scrollOffset        float64
+	listWidth           float64
+	padding             float64
+	drawInfos           []ElementInfo
+	bounds              [][2]int
+	selectedListIndex   int
+	atlasScale          float64
+	atlasBounds         geometry.Rect
+	atlasSelectorPos    geometry.Point
+	drawAtlasCursor     bool
+	selectedAtlasIndex  int32
+	originalRecords     []recfile.Record
+	mappingFileName     string
+	saveTicks           int
+	showHelp            bool
+}
+
+var helpLines = []string{
+	"ReMapper hotkeys",
+	"",
+	"F1          toggle this help",
+	"s           save changes",
+	"F10         quit",
+	"mouse wheel scroll the list",
+	"click list  select an entry",
+	"click atlas assign that icon to the selected entry",
 }
 
 func NewEngine(width, height int, title string) *Engine {
@@ -61,19 +81,14 @@ func NewEngine(width, height int, title string) *Engine {
 }
 
 func (e *Engine) saveChanges(fileName string) {
-	records := e.originalRecords
-	for recIndex, rec := range records {
-		internalName := rec.FindFirstFieldValue("internal_name")
-		for fieldIndex, field := range rec {
-			if field.Name == "icon" {
-				changedIcon := e.iconMapping[internalName]
-				field.Value = strconv.Itoa(int(changedIcon))
-				records[recIndex][fieldIndex] = field
-			}
-		}
+	// patched in place, so the file's comments and other fields survive the save
+	err := recfile.PatchFieldInFile(fileName, "internal_name", "icon", func(id string) ([]string, bool) {
+		icon, ok := e.iconMapping[id]
+		return []string{strconv.Itoa(int(icon))}, ok
+	})
+	if err != nil {
+		log.Println(err)
 	}
-	file, _ := os.Create(fileName)
-	recfile.Write(file, records)
 }
 func (e *Engine) GetDeviceDPIScale() float64 {
 	return e.deviceDPIScale
@@ -125,6 +140,12 @@ func (e *Engine) Draw(screen *ebiten.Image) {
 		e.renderer.DrawTTFOnScreen(saveTextX, saveTextY, saveText, color.RGBA{R: 255, G: 255, B: 255, A: 255})
 		return
 	}
+	if e.showHelp {
+		for i, line := range helpLines {
+			e.renderer.DrawTTFOnScreen(e.padding, 30+float64(i)*24, line, color.White)
+		}
+		return
+	}
 	// list
 	for index, drawInfo := range e.drawInfos {
 		key := e.orderedKeys[index]
@@ -134,7 +155,7 @@ func (e *Engine) Draw(screen *ebiten.Image) {
 		if index == e.selectedListIndex {
 			drawColor = color.RGBA{R: 255, G: 76, B: 67, A: 255}
 		}
-		e.renderer.DrawTTFOnScreen(drawInfo.TextPosition.X, drawInfo.TextPosition.Y, key, drawColor)
+		e.renderer.DrawTTFOnScreen(drawInfo.TextPosition.X, drawInfo.TextPosition.Y, e.labels[key], drawColor)
 	}
 
 	// atlas
@@ -152,6 +173,54 @@ func (e *Engine) Draw(screen *ebiten.Image) {
 		drawPos := e.gridToScreen(geometry.Point{X: gridPosX, Y: gridPosY})
 		e.renderer.DrawColoredRect(drawPos, atlasTileSize, color.RGBA{R: 30, G: 25, B: 200, A: 75})
 	}
+
+	e.drawReferenceImage()
+}
+
+// referenceImageBoxSize is how much screen space the reference picture gets, right of the atlas.
+var referenceImageBoxSize = geometry.Point{X: 320, Y: 320}
+
+// drawReferenceImage shows the selected entry's reference_image (if it has one) beside the atlas, scaled down
+// to fit referenceImageBoxSize without distorting it, so the user can compare it against candidate tiles.
+func (e *Engine) drawReferenceImage() {
+	if e.selectedListIndex < 0 || e.selectedListIndex >= len(e.orderedKeys) {
+		return
+	}
+	path, ok := e.referenceImages[e.orderedKeys[e.selectedListIndex]]
+	if !ok {
+		return
+	}
+	img := e.loadReferenceImage(path)
+	if img == nil {
+		return
+	}
+	boxX := e.atlasBounds.Max.X + int(e.padding)
+	bounds := img.Bounds()
+	scale := min(float64(referenceImageBoxSize.X)/float64(bounds.Dx()), float64(referenceImageBoxSize.Y)/float64(bounds.Dy()))
+	size := geometry.Point{X: int(float64(bounds.Dx()) * scale), Y: int(float64(bounds.Dy()) * scale)}
+	e.renderer.DrawImageOnScreen(boxX, 0, size, img)
+}
+
+// loadReferenceImage lazily decodes and caches a reference_image path; a load failure is cached as nil so a
+// missing/bad file is only ever attempted once.
+func (e *Engine) loadReferenceImage(path string) *ebiten.Image {
+	if img, cached := e.referenceImageCache[path]; cached {
+		return img
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		e.referenceImageCache[path] = nil
+		return nil
+	}
+	defer f.Close()
+	decoded, _, err := image.Decode(f)
+	if err != nil {
+		e.referenceImageCache[path] = nil
+		return nil
+	}
+	img := ebiten.NewImageFromImage(decoded)
+	e.referenceImageCache[path] = img
+	return img
 }
 
 type ElementInfo struct {
@@ -175,7 +244,7 @@ func (e *Engine) updateElementBounds() {
 	for _, key := range e.orderedKeys {
 		//e.renderer.DrawScaledTile(drawX, drawY, e.tileAtlas, currentIcon, iconScale, color.White)
 		iconPosition := geometry.PointF{X: drawX, Y: drawY}
-		tW, tH := e.renderer.MeasureString(key)
+		tW, tH := e.renderer.MeasureString(e.labels[key])
 		if tW > maxWidth {
 			maxWidth = tW
 		}
@@ -238,8 +307,11 @@ func (e *Engine) SetAtlas(atlas renderer.TextureAtlas) {
 	e.updateElementBounds()
 }
 
-func (e *Engine) SetMapping(mappingFileName string, mapping map[string]int32, records []recfile.Record) {
+func (e *Engine) SetMapping(mappingFileName string, mapping map[string]int32, labels map[string]string, referenceImages map[string]string, records []recfile.Record) {
 	e.iconMapping = mapping
+	e.labels = labels
+	e.referenceImages = referenceImages
+	e.referenceImageCache = make(map[string]*ebiten.Image)
 	e.mappingFileName = mappingFileName
 	var orderedKeys []string
 
@@ -248,7 +320,7 @@ func (e *Engine) SetMapping(mappingFileName string, mapping map[string]int32, re
 	}
 
 	slices.SortStableFunc(orderedKeys, func(i, j string) int {
-		return cmp.Compare(i, j)
+		return cmp.Or(cmp.Compare(labels[i], labels[j]), cmp.Compare(i, j))
 	})
 
 	e.orderedKeys = orderedKeys

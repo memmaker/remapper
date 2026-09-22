@@ -11,6 +11,13 @@ func (e *Engine) handleInput() bool {
         e.shouldQuit = true
     }
 
+    if inpututil.IsKeyJustPressed(ebiten.KeyF1) {
+        e.showHelp = !e.showHelp
+    }
+    if e.showHelp {
+        return false
+    }
+
     if inpututil.IsKeyJustPressed(ebiten.KeyS) {
         e.saveChanges(e.mappingFileName)
         e.saveTicks = 30
