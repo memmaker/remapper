@@ -15,6 +15,9 @@ func (e *Engine) handleInput() bool {
         e.showHelp = !e.showHelp
     }
     if e.showHelp {
+        if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+            e.showHelp = false
+        }
         return false
     }
     e.checkDrop()

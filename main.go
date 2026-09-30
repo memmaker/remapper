@@ -78,6 +78,7 @@ func main() {
 	engine := NewEngine(1200, 800, "ReMapper")
 	engine.SetTTFFont(mustOpenEmbedded("FiraSans-Regular.ttf"), 16)
 	engine.SetAtlas(atlas)
+	engine.sheetPath = atlasName
 	engine.SetMapping(mappingFileName, mapping, labels, referenceImages, originalRecords)
 
 	runAppWithEbiten(engine)

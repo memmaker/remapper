@@ -64,27 +64,65 @@ type Engine struct {
 	cutMode     bool
 	atlasScroll float64 // pixels the atlas is scrolled up (mouse wheel over it)
 	pendingDrop *droppedSheet
+
+	// composed tiles (shift+click in the atlas): the sheets' pixels, written by save
+	sheetPath, animPath string
+	pixels, animPixels  *image.RGBA
+	sheetDirty          bool
 }
 
-var helpLines = []string{
-	"ReMapper hotkeys",
-	"",
-	"F1          toggle this help",
-	"s           save changes",
-	"F10         quit",
-	"mouse wheel scroll the list (or the atlas, over it)",
-	"+ / -       zoom the atlas",
-	"click list  select an entry",
-	"click atlas assign that icon to the selected entry",
-	"drop a png  use it as the tileset (asks about the old indexes)",
-	"c           cut mode: arrows offset, shift+arrows tile size, alt+arrows gap",
-	"",
-	"typed rec files (remapper <file.rec>):",
-	"Tab         next category (list filter)",
-	"F2          scene preview on/off",
-	"Space       next scene (preview)",
-	"click       (preview) select that entry",
-	"Del         mark the selected entry unassigned",
+var helpSections = []struct {
+	title string
+	keys  [][2]string
+}{
+	{"General", [][2]string{
+		{"F1 / Esc", "close this help"},
+		{"S", "save: the rec file, and the sheet when tiles were composed"},
+		{"F10", "quit"},
+	}},
+	{"Mapping", [][2]string{
+		{"click list", "select an entry"},
+		{"click atlas", "assign that tile to the selected entry"},
+		{"shift+click atlas", "draw that tile over the entry's tile into a new cell, assign it"},
+		{"mouse wheel", "scroll the list, or the atlas under the mouse"},
+		{"+ / -", "zoom the atlas"},
+	}},
+	{"Tileset", [][2]string{
+		{"drop a png", "use it as the tileset (asks about the old indexes)"},
+		{"C", "cut mode on / off"},
+		{"arrows", "cut mode: move the offset"},
+		{"shift+arrows", "cut mode: tile size"},
+		{"alt+arrows", "cut mode: gap between tiles"},
+	}},
+	{"Typed rec files (remapper <file.rec>)", [][2]string{
+		{"Tab", "next category (list filter)"},
+		{"F2", "scene preview on / off"},
+		{"Space", "preview: next scene"},
+		{"click", "preview: select that entry"},
+		{"Del", "mark the selected entry unassigned"},
+	}},
+}
+
+var (
+	helpTitleColor = color.RGBA{R: 255, G: 76, B: 67, A: 255}
+	helpHeadColor  = color.RGBA{R: 120, G: 200, B: 255, A: 255}
+	helpKeyColor   = color.RGBA{R: 255, G: 220, B: 90, A: 255}
+)
+
+func (e *Engine) drawHelp() {
+	x, y := 3*e.padding, 44.0
+	e.renderer.DrawTTFOnScreen(x, y, "ReMapper hotkeys", helpTitleColor)
+	y += 40
+	for _, s := range helpSections {
+		e.renderer.DrawTTFOnScreen(x, y, s.title, helpHeadColor)
+		y += 28
+		for _, k := range s.keys {
+			e.renderer.DrawTTFOnScreen(x+20, y, k[0], helpKeyColor)
+			e.renderer.DrawTTFOnScreen(x+200, y, k[1], color.White)
+			y += 24
+		}
+		y += 16
+	}
 }
 
 func NewEngine(width, height int, title string) *Engine {
@@ -104,6 +142,7 @@ func NewEngine(width, height int, title string) *Engine {
 }
 
 func (e *Engine) saveChanges(fileName string) {
+	e.saveSheets()
 	if e.typed {
 		e.saveTyped()
 		return
@@ -167,9 +206,7 @@ func (e *Engine) Draw(screen *ebiten.Image) {
 		return
 	}
 	if e.showHelp {
-		for i, line := range helpLines {
-			e.renderer.DrawTTFOnScreen(e.padding, 30+float64(i)*24, line, color.White)
-		}
+		e.drawHelp()
 		return
 	}
 	if e.pendingDrop != nil {
@@ -386,6 +423,14 @@ func (e *Engine) handleMouseClick() bool {
 			atlasIndex := XYToIndex(atlasPos.X, atlasPos.Y, e.tileAtlas.GetCellCount().X)
 			//println(fmt.Sprintf("atlas %s", atlasPos.String()))
 			selectedKey := e.orderedKeys[e.selectedListIndex]
+			if base := e.iconMapping[selectedKey]; ebiten.IsKeyPressed(ebiten.KeyShift) && base >= 0 {
+				composed, err := e.composeTile(base, int32(atlasIndex))
+				if err != nil {
+					log.Println(err)
+					return false
+				}
+				atlasIndex = int(composed)
+			}
 			e.iconMapping[selectedKey] = int32(atlasIndex)
 			e.selectedAtlasIndex = int32(atlasIndex)
 		}
