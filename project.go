@@ -9,7 +9,9 @@ package main
 //	%doc: Monsters           the category's display name
 //	id / name / icon         icon -1: unassigned
 //
-// scenes: a rec file of "%rec: Scene" records (id, name, category, under, legend..., map) drawn by the preview (F2).
+// scenes: a rec file of "%rec: Scene" records (id, name, category, legend..., map, ground) drawn by the preview (F2):
+// map holds the tile on top, ground (optional, same size) the tile drawn under it; without ground, under names
+// one tile drawn under every creature and item.
 
 import (
 	"ReMapper/geometry"
@@ -39,7 +41,8 @@ type scene struct {
 	id, name, under string
 	categories      []string
 	legend          map[rune]string // map character -> "<category>/<id>"
-	rows            [][]rune
+	rows            [][]rune        // map: the tile on top
+	ground          [][]rune        // ground: the tile the game draws under it (optional)
 }
 
 type droppedSheet struct {
@@ -148,9 +151,15 @@ func loadScenes(path string) ([]scene, error) {
 				if ch, key, ok := strings.Cut(fl.Value, " "); ok && ch != "" {
 					s.legend[[]rune(ch)[0]] = strings.TrimSpace(key)
 				}
-			case "map":
+			case "map", "ground":
+				var rows [][]rune
 				for _, row := range strings.Split(strings.TrimPrefix(fl.Value, "\n"), "\n") {
-					s.rows = append(s.rows, []rune(row))
+					rows = append(rows, []rune(row))
+				}
+				if fl.Name == "map" {
+					s.rows = rows
+				} else {
+					s.ground = rows
 				}
 			}
 		}
@@ -454,11 +463,17 @@ func (e *Engine) drawPreview() {
 				continue
 			}
 			px, py := origin.X+float64(x)*cw, origin.Y+float64(y)*ch
-			if !strings.HasPrefix(key, "world/") && s.under != "" {
-				e.drawIcon(px, py, s.under, scale)
+			groundKey := ""
+			if y < len(s.ground) && x < len(s.ground[y]) {
+				groundKey = s.legend[s.ground[y][x]]
+			} else if s.ground == nil && !strings.HasPrefix(key, "world/") {
+				groundKey = s.under // older scenes: one floor under every creature and item
+			}
+			if groundKey != "" {
+				e.drawIcon(px, py, groundKey, scale)
 			}
 			e.drawIcon(px, py, key, scale)
-			if key == selected {
+			if key == selected || (groundKey != "" && groundKey == selected) {
 				e.renderer.DrawColoredRect(geometry.Point{X: int(px), Y: int(py)}, geometry.Point{X: int(cw), Y: int(ch)}, highlightColor)
 			}
 		}
