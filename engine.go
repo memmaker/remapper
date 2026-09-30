@@ -156,7 +156,6 @@ func (e *Engine) Update() error {
 
 func (e *Engine) Draw(screen *ebiten.Image) {
 	e.renderer.SetRenderTarget(screen)
-	iconScale := geometry.PointF{X: 1, Y: 1}
 
 	if e.saveTicks > 0 {
 		saveText := "Saved Changes!"
@@ -184,7 +183,7 @@ func (e *Engine) Draw(screen *ebiten.Image) {
 	// list
 	for index, drawInfo := range e.drawInfos {
 		key := e.orderedKeys[index]
-		e.drawIcon(drawInfo.IconPosition.X, drawInfo.IconPosition.Y, key, iconScale.X)
+		e.drawIcon(drawInfo.IconPosition.X, drawInfo.IconPosition.Y, key, e.listIconScale())
 		drawColor := color.RGBA{R: 255, G: 255, B: 255, A: 255}
 		if index == e.selectedListIndex {
 			drawColor = color.RGBA{R: 255, G: 76, B: 67, A: 255}
@@ -262,14 +261,19 @@ type ElementInfo struct {
 	TextPosition geometry.PointF
 }
 
+// listIconSize is the height of a list icon in screen points; rows are that tall plus listRowGap.
+const listIconSize, listRowGap = 32.0, 6.0
+
+// listIconScale scales an atlas tile to listIconSize, whatever the tile size.
+func (e *Engine) listIconScale() float64 {
+	return listIconSize / float64(e.tileAtlas.GetTileSize().Y)
+}
+
 func (e *Engine) updateElementBounds() {
-	iconScale := geometry.PointF{X: 1, Y: 1}
 	maxWidth := 0.0
 	maxHeight := 0.0
 	tileSize := e.tileAtlas.GetTileSize()
-	scaledIconSize := geometry.PointF{X: float64(tileSize.X) * e.tileScale * iconScale.X, Y: float64(tileSize.Y) * e.tileScale * iconScale.Y}
-
-	lineDistance := 20.0
+	scaledIconSize := geometry.PointF{X: float64(tileSize.X) * e.listIconScale(), Y: listIconSize}
 
 	drawX := e.padding
 	drawY := e.scrollOffset
@@ -285,7 +289,8 @@ func (e *Engine) updateElementBounds() {
 		if tH > maxHeight {
 			maxHeight = tH
 		}
-		textPosition := geometry.PointF{X: drawX + scaledIconSize.X + e.padding, Y: drawY + tH}
+		// the text's baseline, so that the text sits in the middle of the icon's height
+		textPosition := geometry.PointF{X: drawX + scaledIconSize.X + e.padding, Y: drawY + (listIconSize+tH)/2 - tH/5}
 		//e.renderer.DrawTTFOnScreen(drawX+scaledIconSize.X+e.padding, drawY+tH, key, color.White)
 
 		drawInfo = append(drawInfo, ElementInfo{
@@ -293,9 +298,9 @@ func (e *Engine) updateElementBounds() {
 			TextPosition: textPosition,
 		})
 
-		boundsInfo = append(boundsInfo, [2]int{int(drawY), int(drawY + scaledIconSize.Y)})
+		boundsInfo = append(boundsInfo, [2]int{int(drawY), int(drawY + listIconSize + listRowGap)})
 
-		drawY += tH + lineDistance
+		drawY += listIconSize + listRowGap
 
 	}
 	e.listWidth = maxWidth + scaledIconSize.X + e.padding*3

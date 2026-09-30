@@ -187,23 +187,10 @@ func (g *TileRenderer) DrawColoredBorder(topLeftScreen geometry.Point, size geom
     g.currentRenderTarget.DrawImage(ExtractSubImageFromAtlas(g.whiteTile, g.defaultAtlas), g.op)
 }
 func (g *TileRenderer) DrawColoredRect(topLeftScreen geometry.Point, size geometry.Point, fillColor color.Color) {
-    drawX := float64(topLeftScreen.X) * g.deviceScale()
-    drawY := float64(topLeftScreen.Y) * g.deviceScale()
-
-    targetWidth := float64(size.X) * g.deviceScale()
-    targetHeight := float64(size.Y) * g.deviceScale()
-
-    tileSize := g.defaultAtlas.GetTileSize()
-
-    scaleX := targetWidth / float64(tileSize.X)
-    scaleY := targetHeight / float64(tileSize.Y)
-
-    g.op.ColorScale.Reset()
-    g.op.ColorScale.ScaleWithColor(fillColor)
-    g.op.GeoM.Reset()
-    g.op.GeoM.Scale(scaleX, scaleY)
-    g.op.GeoM.Translate(float64(drawX), float64(drawY))
-    g.currentRenderTarget.DrawImage(ExtractSubImageFromAtlas(g.whiteTile, g.defaultAtlas), g.op)
+    // a plain rectangle: the atlas' "white tile" is only white in atlases made for that
+    scale := float32(g.deviceScale())
+    vector.DrawFilledRect(g.currentRenderTarget, float32(topLeftScreen.X)*scale, float32(topLeftScreen.Y)*scale,
+        float32(size.X)*scale, float32(size.Y)*scale, fillColor, false)
 }
 
 func (g *TileRenderer) DrawStringOnGrid(gridX int, gridY int, text string, color color.Color) {
