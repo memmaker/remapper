@@ -20,6 +20,9 @@ type TextureAtlas struct {
     imageData *ebiten.Image
     tileSizeX int
     tileSizeY int
+    // cutting: the first cell's top left corner and the empty pixels between cells
+    Offset geometry.Point
+    Gap    geometry.Point
 }
 
 func (a TextureAtlas) GetTileSize() geometry.Point {
@@ -38,9 +41,28 @@ func (a TextureAtlas) GetImage() *ebiten.Image {
 
 func (a TextureAtlas) GetCellCount() geometry.Point {
     return geometry.Point{
-        X: a.imageData.Bounds().Dx() / a.tileSizeX,
-        Y: a.imageData.Bounds().Dy() / a.tileSizeY,
+        X: max(1, (a.imageData.Bounds().Dx()-a.Offset.X+a.Gap.X)/(a.tileSizeX+a.Gap.X)),
+        Y: max(1, (a.imageData.Bounds().Dy()-a.Offset.Y+a.Gap.Y)/(a.tileSizeY+a.Gap.Y)),
     }
+}
+
+// SetTileSize changes the cutting; sizes below one pixel are clamped.
+func (a *TextureAtlas) SetTileSize(w, h int) {
+    a.tileSizeX, a.tileSizeY = max(1, w), max(1, h)
+}
+
+// CellOrigin is the pixel position of grid cell (x, y) in the image.
+func (a TextureAtlas) CellOrigin(cell geometry.Point) geometry.Point {
+    return geometry.Point{X: a.Offset.X + cell.X*(a.tileSizeX+a.Gap.X), Y: a.Offset.Y + cell.Y*(a.tileSizeY+a.Gap.Y)}
+}
+
+// CellAt is the grid cell under an image pixel (a gap pixel counts to the cell before it).
+func (a TextureAtlas) CellAt(pixel geometry.Point) geometry.Point {
+    return geometry.Point{X: (pixel.X - a.Offset.X) / (a.tileSizeX + a.Gap.X), Y: (pixel.Y - a.Offset.Y) / (a.tileSizeY + a.Gap.Y)}
+}
+
+func NewTextureAtlasFromImage(img image.Image, tileSizeX, tileSizeY int) TextureAtlas {
+    return TextureAtlas{imageData: ebiten.NewImageFromImage(img), tileSizeX: max(1, tileSizeX), tileSizeY: max(1, tileSizeY)}
 }
 
 func NewTextureAtlas(imageFilename string, tileSizeX, tileSizeY int) TextureAtlas {

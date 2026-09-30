@@ -60,3 +60,17 @@ func TestPatchRealModFilesUnchanged(t *testing.T) {
 		}
 	}
 }
+
+func TestPatchTypedFieldInFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "typed.rec")
+	os.WriteFile(path, []byte("%rec: monster\n%doc: Monsters\n\nid: door\nicon: 1\n\n%rec: world\n\nid: door\nicon: 2\nanim: x\n"), 0o644)
+	PatchTypedFieldInFile(path, "id", "icon", func(recType, id string) ([]string, bool) {
+		return []string{"9"}, recType == "world"
+	})
+	PatchTypedFieldInFile(path, "id", "anim", func(recType, id string) ([]string, bool) { return nil, true })
+	got, _ := os.ReadFile(path)
+	want := "%rec: monster\n%doc: Monsters\n\nid: door\nicon: 1\n\n%rec: world\n\nid: door\nicon: 9\n"
+	if string(got) != want {
+		t.Fatalf("got %q", got)
+	}
+}

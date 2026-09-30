@@ -53,8 +53,17 @@ func buildCurrentMapping(mappingRecFile string) ([]recfile.Record, map[string]in
 
 func main() {
 
+	if len(os.Args) == 2 { // a typed rec file: its Tileset record names the sheet and the cutting
+		engine := NewEngine(1200, 800, "ReMapper")
+		engine.SetTTFFont(mustOpenEmbedded("FiraSans-Regular.ttf"), 16)
+		if err := engine.LoadTyped(os.Args[1]); err != nil {
+			log.Fatal(err)
+		}
+		runAppWithEbiten(engine)
+		return
+	}
 	if len(os.Args) < 5 {
-		log.Fatal("Usage: remapper <cell width> <cell height> <atlas png file> <mapping rec file>")
+		log.Fatal("Usage: remapper <cell width> <cell height> <atlas png file> <mapping rec file>\n       remapper <typed rec file>")
 	}
 	// read the first two command line arguments
 

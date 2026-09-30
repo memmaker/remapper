@@ -435,11 +435,9 @@ func ExtractSubImageFromAtlas(textureIndex int32, atlas TextureAtlas) *ebiten.Im
     tileSizeY := atlas.tileSizeY
     textureData := atlas.imageData
 
-    atlasItemCountX := int32(textureData.Bounds().Size().X / tileSizeX)
-    textureRectTopLeft := image.Point{
-        X: int((textureIndex % atlasItemCountX) * int32(tileSizeX)),
-        Y: int((textureIndex / atlasItemCountX) * int32(tileSizeY)),
-    }
+    atlasItemCountX := int32(atlas.GetCellCount().X)
+    origin := atlas.CellOrigin(geometry.Point{X: int(textureIndex % atlasItemCountX), Y: int(textureIndex / atlasItemCountX)})
+    textureRectTopLeft := image.Point{X: origin.X, Y: origin.Y}
     textureRect := image.Rectangle{
         Min: textureRectTopLeft,
         Max: image.Point{
