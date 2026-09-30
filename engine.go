@@ -51,6 +51,19 @@ type Engine struct {
 	mappingFileName     string
 	saveTicks           int
 	showHelp            bool
+
+	// typed rec files (project.go)
+	typed       bool
+	types       []string          // category sections in file order
+	typeDocs    map[string]string // category -> %doc display name
+	category    int               // index into types, -1: all
+	allKeys     []string
+	scenes      []scene
+	sceneIndex  int
+	showPreview bool
+	cutMode     bool
+	atlasScroll float64 // pixels the atlas is scrolled up (mouse wheel over it)
+	pendingDrop *droppedSheet
 }
 
 var helpLines = []string{
@@ -59,9 +72,19 @@ var helpLines = []string{
 	"F1          toggle this help",
 	"s           save changes",
 	"F10         quit",
-	"mouse wheel scroll the list",
+	"mouse wheel scroll the list (or the atlas, over it)",
+	"+ / -       zoom the atlas",
 	"click list  select an entry",
 	"click atlas assign that icon to the selected entry",
+	"drop a png  use it as the tileset (asks about the old indexes)",
+	"c           cut mode: arrows offset, shift+arrows tile size, alt+arrows gap",
+	"",
+	"typed rec files (remapper <file.rec>):",
+	"Tab         next category (list filter)",
+	"F2          scene preview on/off",
+	"Space       next scene (preview)",
+	"click       (preview) select that entry",
+	"Del         mark the selected entry unassigned",
 }
 
 func NewEngine(width, height int, title string) *Engine {
@@ -81,6 +104,10 @@ func NewEngine(width, height int, title string) *Engine {
 }
 
 func (e *Engine) saveChanges(fileName string) {
+	if e.typed {
+		e.saveTyped()
+		return
+	}
 	// patched in place, so the file's comments and other fields survive the save
 	err := recfile.PatchFieldInFile(fileName, "internal_name", "icon", func(id string) ([]string, bool) {
 		icon, ok := e.iconMapping[id]
@@ -146,11 +173,18 @@ func (e *Engine) Draw(screen *ebiten.Image) {
 		}
 		return
 	}
+	if e.pendingDrop != nil {
+		e.drawDropQuestion()
+		return
+	}
+	if e.showPreview {
+		e.drawPreview()
+		return
+	}
 	// list
 	for index, drawInfo := range e.drawInfos {
 		key := e.orderedKeys[index]
-		currentIcon := e.iconMapping[key]
-		e.renderer.DrawScaledTile(drawInfo.IconPosition.X, drawInfo.IconPosition.Y, e.tileAtlas, currentIcon, iconScale, color.White)
+		e.drawIcon(drawInfo.IconPosition.X, drawInfo.IconPosition.Y, key, iconScale.X)
 		drawColor := color.RGBA{R: 255, G: 255, B: 255, A: 255}
 		if index == e.selectedListIndex {
 			drawColor = color.RGBA{R: 255, G: 76, B: 67, A: 255}
@@ -167,7 +201,7 @@ func (e *Engine) Draw(screen *ebiten.Image) {
 		e.renderer.DrawColoredRect(e.atlasSelectorPos, atlasTileSize, color.RGBA{R: 30, G: 200, B: 30, A: 75})
 	}
 
-	if e.selectedAtlasIndex > 0 {
+	if e.selectedAtlasIndex >= 0 {
 		cellCountX := e.tileAtlas.GetCellCount().X
 		gridPosX, gridPosY := IndexToXY(int(e.selectedAtlasIndex), cellCountX)
 		drawPos := e.gridToScreen(geometry.Point{X: gridPosX, Y: gridPosY})
@@ -270,7 +304,8 @@ func (e *Engine) updateElementBounds() {
 
 	atlasX := int(e.listWidth + e.padding)
 	atlasSize := e.tileAtlas.GetAtlasSize().MulF(e.atlasScale)
-	e.atlasBounds = geometry.NewRect(atlasX, 0, atlasX+atlasSize.X, atlasSize.Y)
+	top := -int(e.atlasScroll)
+	e.atlasBounds = geometry.NewRect(atlasX, top, atlasX+atlasSize.X, top+atlasSize.Y)
 }
 func (e *Engine) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
 	panic("implement me")
@@ -337,6 +372,7 @@ func (e *Engine) handleMouseClick() bool {
 				key := e.orderedKeys[index]
 				e.selectedListIndex = index
 				e.selectedAtlasIndex = e.iconMapping[key]
+				e.revealAtlasIndex()
 				return true
 			}
 		} else if e.selectedListIndex >= 0 && e.selectedListIndex < len(e.orderedKeys) {
@@ -355,9 +391,7 @@ func (e *Engine) handleMouseClick() bool {
 func (e *Engine) atlasGridFromScreenPos(screenPos geometry.Point) geometry.Point {
 	relativeToAtlas := screenPos.Sub(e.atlasBounds.Min)
 	relativeToAtlas = relativeToAtlas.DivF(e.atlasScale)
-	tileSize := e.tileAtlas.GetTileSize()
-	gridPos := geometry.Point{X: relativeToAtlas.X / tileSize.X, Y: relativeToAtlas.Y / tileSize.Y}
-	return gridPos
+	return e.tileAtlas.CellAt(relativeToAtlas)
 }
 
 func (e *Engine) OnMouseMoved(mousePos geometry.Point) {
@@ -373,10 +407,10 @@ func (e *Engine) OnMouseMoved(mousePos geometry.Point) {
 }
 
 func (e *Engine) gridToScreen(gridPos geometry.Point) geometry.Point {
-	tileSize := e.tileAtlas.GetTileSize()
+	origin := e.tileAtlas.CellOrigin(gridPos)
 	drawPosForSelector := geometry.Point{
-		X: int(float64(gridPos.X)*float64(tileSize.X)*e.atlasScale) + e.atlasBounds.Min.X,
-		Y: int(float64(gridPos.Y)*float64(tileSize.Y)*e.atlasScale) + e.atlasBounds.Min.Y,
+		X: int(float64(origin.X)*e.atlasScale) + e.atlasBounds.Min.X,
+		Y: int(float64(origin.Y)*e.atlasScale) + e.atlasBounds.Min.Y,
 	}
 	return drawPosForSelector
 }
@@ -387,4 +421,17 @@ func IndexToXY(index int, width int) (int, int) {
 
 func XYToIndex(x int, y int, width int) int {
 	return y*width + x
+}
+
+// revealAtlasIndex scrolls the atlas so the selected icon is on screen.
+func (e *Engine) revealAtlasIndex() {
+	if e.selectedAtlasIndex < 0 {
+		return
+	}
+	_, y := IndexToXY(int(e.selectedAtlasIndex), e.tileAtlas.GetCellCount().X)
+	top := e.gridToScreen(geometry.Point{Y: y}).Y + int(e.atlasScroll)
+	if top < int(e.atlasScroll) || top > int(e.atlasScroll)+e.deviceIndependentScreenSize.Y-100 {
+		e.atlasScroll = max(0, float64(top-e.deviceIndependentScreenSize.Y/3))
+		e.updateElementBounds()
+	}
 }

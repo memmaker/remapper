@@ -11,6 +11,14 @@ import (
 // false to leave the record alone. The record's old field lines go, and the new ones take the place of the first
 // of them, or follow the record's last field if it had none.
 func PatchFieldInFile(path, key, field string, values func(id string) (newValues []string, ok bool)) error {
+	return PatchTypedFieldInFile(path, key, field, func(_, id string) ([]string, bool) { return values(id) })
+}
+
+// PatchTypedFieldInFile is PatchFieldInFile for files with "%rec: <type>" sections: values also gets the record's
+// type ("default" before the first %rec line), so equal ids in different sections stay apart. No new values
+// removes the field.
+func PatchTypedFieldInFile(path, key, field string, values func(recType, id string) (newValues []string, ok bool)) error {
+	recType := "default"
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -27,7 +35,7 @@ func PatchFieldInFile(path, key, field string, values func(id string) (newValues
 				break
 			}
 		}
-		newValues, ok := values(id)
+		newValues, ok := values(recType, id)
 		if id == "" || !ok {
 			out = append(out, rec...)
 			return
@@ -61,6 +69,9 @@ func PatchFieldInFile(path, key, field string, values func(id string) (newValues
 		t := strings.TrimSpace(l)
 		if t == "" || strings.HasPrefix(t, "%rec:") {
 			flush()
+			if strings.HasPrefix(t, "%rec:") {
+				recType = strings.TrimSpace(t[len("%rec:"):])
+			}
 			out = append(out, l)
 			continue
 		}
