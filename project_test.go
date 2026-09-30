@@ -43,7 +43,7 @@ icon: 2
 id: orc
 icon: -1
 `), 0o644)
-	os.WriteFile(filepath.Join(dir, "scenes.rec"), []byte("%rec: Scene\n\nid: s\ncategory: monster\nunder: world/floor\nlegend: . world/floor\nlegend: o monster/orc\nmap:\n+ ...\n+ .o.\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "scenes.rec"), []byte("%rec: Scene\n\nid: s\ncategory: monster\nunder: world/floor\nlegend: . world/floor\nlegend: o monster/orc\nlegend: , world/grass\nmap:\n+ ...\n+ .o.\nground:\n+\n+  ,\n"), 0o644)
 
 	// NewEngine asks ebiten for the display scale, which needs the main thread
 	e := &Engine{deviceDPIScale: 1, tileScale: 4, padding: 10, atlasScale: 3, selectedListIndex: -1, selectedAtlasIndex: -1,
@@ -66,6 +66,9 @@ icon: -1
 	}
 	if s := e.currentScene(); string(s.rows[1]) != ".o." || s.legend['o'] != "monster/orc" {
 		t.Fatalf("scene %+v", s)
+	}
+	if s := e.currentScene(); len(s.ground) != 2 || s.legend[s.ground[1][1]] != "world/grass" {
+		t.Fatalf("ground %q", s.ground)
 	}
 
 	e.iconMapping["monster/orc"] = 5
