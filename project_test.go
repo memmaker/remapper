@@ -1,6 +1,7 @@
 package main
 
 import (
+	"image/color"
 	"ReMapper/geometry"
 	"ReMapper/renderer"
 	"image"
@@ -14,7 +15,7 @@ import (
 // A typed rec round trip: load, filter, edit, save, reload; then a dropped sheet makes a new rec.
 func TestTypedRec(t *testing.T) {
 	dir := t.TempDir()
-	writePNG(t, filepath.Join(dir, "sheet.png"), 64, 32)
+	writeBlankPNG(t, filepath.Join(dir, "sheet.png"), 64, 32)
 	os.WriteFile(filepath.Join(dir, "game-sheet.rec"), []byte(`# kept
 %rec: Tileset
 id: sheet
@@ -77,6 +78,37 @@ icon: -1
 		}
 	}
 
+	// shift+click: tile 1 (red left half) over tile 0 (blue) -> the first free cell, 2; saved with the rec
+	e.tileAtlas.Offset, e.tileAtlas.Gap = geometry.Point{}, geometry.Point{}
+	e.pixels = image.NewRGBA(image.Rect(0, 0, 64, 32))
+	for y := 0; y < 16; y++ {
+		for x := 0; x < 16; x++ {
+			e.pixels.Set(x, y, color.RGBA{B: 255, A: 255})
+			if x < 8 {
+				e.pixels.Set(16+x, y, color.RGBA{R: 255, A: 255})
+			}
+		}
+	}
+	e.animPath = ""
+	if at, err := e.composeTile(0, 1); err != nil || at != 2 {
+		t.Fatal("compose", at, err)
+	}
+	if e.pixels.RGBAAt(32+2, 5).R != 255 || e.pixels.RGBAAt(32+12, 5).B != 255 {
+		t.Fatal("composed pixels", e.pixels.RGBAAt(34, 5), e.pixels.RGBAAt(44, 5))
+	}
+	for i := 3; i < 8; i++ { // fill the rest: the next one needs a new row
+		e.composeTile(0, 1)
+	}
+	if at, _ := e.composeTile(0, 1); at != 8 || e.pixels.Bounds().Dy() != 48 {
+		t.Fatal("grow", at, e.pixels.Bounds())
+	}
+	e.saveTyped()
+	e.saveSheets()
+	if img, err := decodeImageFile(filepath.Join(dir, "sheet.png")); err != nil || img.Bounds().Dy() != 48 {
+		t.Fatal("sheet not saved", err)
+	}
+	saved, _ = os.ReadFile(filepath.Join(dir, "game-sheet.rec"))
+
 	// drop: new rec next to the old one, the old one untouched
 	f, _ := os.ReadFile(filepath.Join(dir, "sheet.png"))
 	img, _, _ := image.Decode(strings.NewReader(string(f)))
@@ -87,7 +119,7 @@ icon: -1
 		t.Fatal("new rec", e.mappingFileName)
 	}
 	fresh, _ := os.ReadFile(e.mappingFileName)
-	for _, want := range []string{"file: other.png", "id: other", "icon: -1", "off_x: 1"} {
+	for _, want := range []string{"file: other.png", "id: other", "icon: -1", "off_x: 0"} {
 		if !strings.Contains(string(fresh), want) {
 			t.Fatalf("new rec lacks %q:\n%s", want, fresh)
 		}
@@ -100,7 +132,7 @@ icon: -1
 	}
 }
 
-func writePNG(t *testing.T, path string, w, h int) {
+func writeBlankPNG(t *testing.T, path string, w, h int) {
 	f, err := os.Create(path)
 	if err != nil {
 		t.Fatal(err)

@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
+	"image/png"
 	"io/fs"
 	"log"
 	"os"
@@ -106,6 +108,10 @@ func (e *Engine) LoadTyped(path string) error {
 	}
 	e.typed, e.types, e.typeDocs, e.category = true, types, docs, -1
 	e.scenes, e.sceneIndex = nil, 0
+	e.sheetPath, e.animPath, e.pixels, e.animPixels, e.sheetDirty = filepath.Join(dir, ts["file"]), "", nil, nil, false
+	if ts["anim_file"] != "" {
+		e.animPath = filepath.Join(dir, ts["anim_file"])
+	}
 	if ts["scenes"] != "" {
 		if e.scenes, err = loadScenes(filepath.Join(dir, ts["scenes"])); err != nil {
 			log.Println(err)
@@ -291,6 +297,7 @@ func (e *Engine) resolveDrop(clearIcons bool) {
 		}
 	}
 	if !e.typed { // classic mode: no Tileset record to keep it in, the sheet is swapped for this session
+		e.sheetPath, e.animPath, e.pixels, e.animPixels, e.sheetDirty = "", "", toRGBA(d.img), nil, false
 		atlas := renderer.NewTextureAtlasFromImage(d.img, e.tileAtlas.GetTileSize().X, e.tileAtlas.GetTileSize().Y)
 		e.SetAtlas(atlas)
 		e.updateTitle()
@@ -505,4 +512,76 @@ func (e *Engine) drawDropQuestion() {
 	for i, l := range lines {
 		e.renderer.DrawTTFOnScreen(e.padding, 40+float64(i)*24, l, color.White)
 	}
+}
+
+// ---- composed tiles --------------------------------------------------------------
+
+func toRGBA(img image.Image) *image.RGBA {
+	if rgba, ok := img.(*image.RGBA); ok {
+		return rgba
+	}
+	rgba := image.NewRGBA(img.Bounds())
+	draw.Draw(rgba, rgba.Bounds(), img, img.Bounds().Min, draw.Src)
+	return rgba
+}
+
+// composeTile draws tile over on top of tile base into the first free cell after the sheet's last used one
+// (the sheet grows by a row when full), on the animation frame sheet too, and returns the new cell.
+func (e *Engine) composeTile(base, over int32) (int32, error) {
+	if e.pixels == nil {
+		img, err := decodeImageFile(e.sheetPath)
+		if err != nil {
+			return -1, err
+		}
+		e.pixels = toRGBA(img)
+	}
+	if e.animPath != "" && e.animPixels == nil {
+		img, err := decodeImageFile(e.animPath)
+		if err != nil {
+			return -1, err
+		}
+		e.animPixels = toRGBA(img)
+	}
+	a := &e.tileAtlas
+	at := a.FreeCell(e.pixels)
+	e.pixels = a.Compose(e.pixels, base, over, at)
+	if e.animPixels != nil {
+		e.animPixels = a.Compose(e.animPixels, base, over, at)
+	}
+	a.SetImage(e.pixels)
+	e.SetAtlas(*a)
+	e.sheetDirty = true
+	return at, nil
+}
+
+// saveSheets writes the sheets when tiles were composed.
+func (e *Engine) saveSheets() {
+	if !e.sheetDirty {
+		return
+	}
+	if e.sheetPath == "" {
+		log.Println("composed tiles not saved: this sheet was dropped in classic mode and has no file")
+		return
+	}
+	err := writePNG(e.sheetPath, e.pixels)
+	if e.animPixels != nil {
+		err = cmp.Or(err, writePNG(e.animPath, e.animPixels))
+	}
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	e.sheetDirty = false
+}
+
+func writePNG(path string, img image.Image) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	if err := png.Encode(f, img); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }
