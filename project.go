@@ -423,7 +423,8 @@ func (e *Engine) drawIcon(x, y float64, key string, scale float64) {
 		e.renderer.DrawColoredRect(geometry.Point{X: int(x), Y: int(y)}, ts, unassignedColor)
 		return
 	}
-	e.renderer.DrawScaledTile(x, y, e.tileAtlas, icon, geometry.PointF{X: scale, Y: scale}, color.White)
+	// DrawScaledTile would multiply by the renderer's tileScale; scale here is screen points per tile pixel
+	e.renderer.DrawTileWithDefaultOrientation(x, y, e.tileAtlas, icon, geometry.PointF{X: scale, Y: scale}, color.White)
 }
 
 func (e *Engine) drawPreview() {
