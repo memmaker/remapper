@@ -18,8 +18,8 @@ var embedFS embed.FS
 
 // buildCurrentMapping also returns each record's optional "name" field, shown in the list instead of
 // internal_name, and its optional "reference_image" field: a path (relative to the working directory the
-// remapper was launched from) to a picture shown beside the atlas while that entry is selected, to compare
-// against while picking a tile.
+// remapper was launched from; in typed rec files relative to the rec file) to a picture shown beside the atlas
+// while that entry is selected, to compare against while picking a tile.
 func buildCurrentMapping(mappingRecFile string) ([]recfile.Record, map[string]int32, map[string]string, map[string]string) {
 	mapping := make(map[string]int32)
 	labels := make(map[string]string)

@@ -56,6 +56,10 @@ func (e *Engine) handleInput() bool {
         e.selectedAtlasIndex = -1
     }
 
+    if e.typed && inpututil.IsKeyJustPressed(ebiten.KeyX) && e.selectedListIndex >= 0 && e.selectedListIndex < len(e.orderedKeys) {
+        delete(e.colors, e.orderedKeys[e.selectedListIndex])
+    }
+
     if inpututil.IsKeyJustPressed(ebiten.KeyS) {
         e.saveChanges(e.mappingFileName)
         e.saveTicks = 30
@@ -75,6 +79,9 @@ func (e *Engine) handleInput() bool {
     if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
         if e.showPreview {
             e.previewClick()
+            return true
+        }
+        if e.swatchClick() {
             return true
         }
         return e.handleMouseClick()

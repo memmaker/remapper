@@ -94,6 +94,12 @@ func (e *Engine) LoadTyped(path string) error {
 		}
 	}
 
+	e.palette, e.colors = nil, map[string]string{}
+	if ts["palette"] != "" {
+		if e.palette, err = loadPalette(filepath.Join(dir, ts["palette"])); err != nil {
+			log.Println(err)
+		}
+	}
 	mapping, labels, refs := map[string]int32{}, map[string]string{}, map[string]string{}
 	for _, t := range types {
 		for _, rec := range sections[t] {
@@ -105,7 +111,10 @@ func (e *Engine) LoadTyped(path string) error {
 			mapping[key] = int32(m.GetIntOrDefault("icon", -1))
 			labels[key] = cmp.Or(m["name"], m["id"])
 			if m["reference_image"] != "" {
-				refs[key] = m["reference_image"]
+				refs[key] = filepath.Join(dir, m["reference_image"])
+			}
+			if m["color"] != "" {
+				e.colors[key] = m["color"]
 			}
 		}
 	}
@@ -184,6 +193,15 @@ func (e *Engine) saveTyped() {
 		icon, ok := e.iconMapping[t+"/"+id]
 		return []string{strconv.Itoa(int(icon))}, ok
 	})
+	err = cmp.Or(err, recfile.PatchTypedFieldInFile(path, "id", "color", func(t, id string) ([]string, bool) {
+		if _, mapped := e.iconMapping[t+"/"+id]; !mapped {
+			return nil, false
+		}
+		if c := e.colors[t+"/"+id]; c != "" {
+			return []string{c}, true
+		}
+		return nil, true // no colour: the field goes
+	}))
 	for i, v := range e.cutValues() {
 		err = cmp.Or(err, e.patchTileset(path, cutFields[i], strconv.Itoa(v)))
 	}
@@ -440,7 +458,7 @@ func (e *Engine) drawIcon(x, y float64, key string, scale float64) {
 		return
 	}
 	// DrawScaledTile would multiply by the renderer's tileScale; scale here is screen points per tile pixel
-	e.renderer.DrawTileWithDefaultOrientation(x, y, e.tileAtlas, icon, geometry.PointF{X: scale, Y: scale}, color.White)
+	e.renderer.DrawTileWithDefaultOrientation(x, y, e.tileAtlas, icon, geometry.PointF{X: scale, Y: scale}, e.tint(key))
 }
 
 func (e *Engine) drawPreview() {

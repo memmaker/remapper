@@ -21,6 +21,7 @@ Typed rec files only:
 Tab - Next category (list filter)
 F2  - Scene preview on/off; Space: next scene; click a cell to select its entry
 Del - Mark the selected entry unassigned (icon: -1, drawn red)
+Swatches (bottom) - Colour the selected entry's tile; X removes the colour
 
 ## Typed rec files
 
@@ -30,3 +31,7 @@ games use at runtime). Dropping a sheet in typed mode writes `<prefix>-<sheet>.r
 Scenes (`%rec: Scene`: id, name, category, legend "<char> <category>/<id>", map,
 and ground: the tile drawn under each map cell, as the game layers them) live in their own rec file, named by the Tileset's `scenes:` field.
 Example: `~/Games/mag/port/mag-dawnlike.rec` and `mag-scenes.rec`.
+Colours: the Tileset's `palette:` names a rec file with a `%rec: colors` record
+(`Name: r | g | b`, a game theme's colour list works as is); an entry's `color:` is
+one of those names and the tile is drawn tinted with it. `reference_image:` paths
+are relative to the rec file. Example: `~/Projects/rx1/data_rx1/tiles/oryx.rec`.

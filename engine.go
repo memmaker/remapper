@@ -65,6 +65,11 @@ type Engine struct {
 	atlasScroll float64 // pixels the atlas is scrolled up (mouse wheel over it)
 	pendingDrop *droppedSheet
 
+	// tile colours (typed rec files): the Tileset's palette file (a rec with a "colors" record of "name: r | g | b"),
+	// and each entry's optional color field, a palette name; the tile is drawn tinted with it (white without one)
+	palette []paletteEntry
+	colors  map[string]string // key -> colour name
+
 	// composed tiles (shift+click in the atlas): the sheets' pixels, written by save
 	sheetPath, animPath string
 	pixels, animPixels  *image.RGBA
@@ -100,6 +105,8 @@ var helpSections = []struct {
 		{"Space", "preview: next scene"},
 		{"click", "preview: select that entry"},
 		{"Del", "mark the selected entry unassigned"},
+		{"click swatch", "colour the selected entry's tile (Tileset field palette:)"},
+		{"X", "remove the selected entry's colour"},
 	}},
 }
 
@@ -245,6 +252,7 @@ func (e *Engine) Draw(screen *ebiten.Image) {
 	}
 
 	e.drawReferenceImage()
+	e.drawSwatches()
 }
 
 // referenceImageBoxSize is how much screen space the reference picture gets, right of the atlas.

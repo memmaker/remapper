@@ -25,6 +25,7 @@ anim_file: sheet.png
 tile_w: 16
 tile_h: 16
 scenes: scenes.rec
+palette: theme.rec
 
 %rec: world
 %doc: World
@@ -32,6 +33,8 @@ scenes: scenes.rec
 id: floor
 name: Floor
 icon: 1
+color: Red
+reference_image: ref.png
 
 %rec: monster
 %doc: Monsters
@@ -43,6 +46,7 @@ icon: 2
 id: orc
 icon: -1
 `), 0o644)
+	os.WriteFile(filepath.Join(dir, "theme.rec"), []byte("%rec: colors\n\nBlack: 0 | 0 | 0\nRed: 255 | 0 | 0\n\n%rec: map\n\nTileFloor: .\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "scenes.rec"), []byte("%rec: Scene\n\nid: s\ncategory: monster\nunder: world/floor\nlegend: . world/floor\nlegend: o monster/orc\nlegend: , world/grass\nmap:\n+ ...\n+ .o.\nground:\n+\n+  ,\n"), 0o644)
 
 	// NewEngine asks ebiten for the display scale, which needs the main thread
@@ -71,11 +75,24 @@ icon: -1
 		t.Fatalf("ground %q", s.ground)
 	}
 
+	// colours: the palette file, the color field, the tint; saved like icon, a removed colour drops the field
+	if len(e.palette) != 2 || e.colors["world/floor"] != "Red" || e.tint("world/floor") != (color.RGBA{255, 0, 0, 255}) || e.tint("monster/orc") != color.White {
+		t.Fatal("colours", e.palette, e.colors)
+	}
+	if e.referenceImages["world/floor"] != filepath.Join(dir, "ref.png") {
+		t.Fatal("reference image not relative to the rec", e.referenceImages)
+	}
+	e.colors["monster/orc"] = "Black"
+	delete(e.colors, "world/floor")
+
 	e.iconMapping["monster/orc"] = 5
 	e.tileAtlas.Offset.X, e.tileAtlas.Gap.Y = 1, 2
 	e.saveTyped()
 	saved, _ := os.ReadFile(filepath.Join(dir, "game-sheet.rec"))
-	for _, want := range []string{"# kept", "id: orc\nicon: 5", "name: Floor\nicon: 1", "off_x: 1", "gap_y: 2"} {
+	if strings.Contains(string(saved), "color: Red") {
+		t.Fatalf("removed colour still saved:\n%s", saved)
+	}
+	for _, want := range []string{"# kept", "id: orc\nicon: 5\ncolor: Black", "name: Floor\nicon: 1\nreference_image", "off_x: 1", "gap_y: 2"} {
 		if !strings.Contains(string(saved), want) {
 			t.Fatalf("saved file lacks %q:\n%s", want, saved)
 		}
