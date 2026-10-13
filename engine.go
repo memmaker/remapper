@@ -354,7 +354,8 @@ func (e *Engine) updateElementBounds() {
 
 	atlasX := int(e.listWidth + e.padding)
 	atlasSize := e.tileAtlas.GetAtlasSize().MulF(e.atlasScale)
-	top := -int(e.atlasScroll)
+	e.atlasBounds = geometry.NewRect(atlasX, 0, atlasX+atlasSize.X, atlasSize.Y) // swatchBand needs the column's x
+	top := e.swatchBand() - int(e.atlasScroll)
 	e.atlasBounds = geometry.NewRect(atlasX, top, atlasX+atlasSize.X, top+atlasSize.Y)
 }
 func (e *Engine) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {

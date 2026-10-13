@@ -21,7 +21,7 @@ Typed rec files only:
 Tab - Next category (list filter)
 F2  - Scene preview on/off; Space: next scene; click a cell to select its entry
 Del - Mark the selected entry unassigned (icon: -1, drawn red)
-Swatches (bottom) - Colour the selected entry's tile; X removes the colour
+Swatches (above the atlas) - Colour the selected entry's tile; X removes the colour
 
 ## Typed rec files
 
